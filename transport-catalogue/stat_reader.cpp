@@ -19,34 +19,44 @@ detail::reader::CommandDescription ParseCommands([[maybe_unused]]std::string_vie
     return cd;
 }
 
+void detail::outstat::PrintStop(catalogue::TransportCatalogue& transport_catalogue, std::string_view request, std::ostream& output) {
+    if (transport_catalogue.FindStop(request)) {
+        catalogue::Stop stop;
+        stop.name = request;
+        transport_catalogue.AddBusesForStop(stop);
+        std::set<std::string_view> buses = transport_catalogue.GetStopInfo(request);
+        output << "Stop " << request << ": ";
+        if (buses.empty()) {
+            output << "no buses" << std::endl;
+        } else {
+            output << "buses";
+            for (const auto& bus : buses) {
+                output << " " << bus;
+            }
+            output << std::endl;
+        }
+    } else {
+        output << "Stop " << request << ": not found" << std::endl;
+    }    
+}
+
+void detail::outstat::PrintBus(catalogue::TransportCatalogue& transport_catalogue, std::string_view request, std::ostream& output) {    
+    if (transport_catalogue.FindBus(request)) {
+        output << "Bus " << request << ": " << transport_catalogue.GetBusInfo(request).stops_count
+        << " stops on route, " << transport_catalogue.GetBusInfo(request).unique_stops_count
+        << " unique stops, " << std::setprecision(6) << transport_catalogue.GetBusInfo(request).route_length
+        << " route length" << std::endl;
+    } else {
+        output << "Bus " << request << ": not found" << std::endl;
+    }    
+}
+
 void detail::outstat::ParseAndPrintStat(catalogue::TransportCatalogue& transport_catalogue, std::string_view request, std::ostream& output) {
     detail::reader::CommandDescription cd = ParseCommands(request);
     if (cd.command == "Stop") {
-        if (transport_catalogue.FindStop(cd.id)) {
-            transport_catalogue.BusesForStop(cd.id);
-            output << "Stop " << cd.id << ": ";
-            std::set<std::string_view> buses = transport_catalogue.GetStopInfo(cd.id);
-            if (buses.empty()) {
-                output << "no buses" << std::endl;
-            } else {
-                output << "buses";
-                for (const auto& bus : buses) {
-                    output << " " << bus;
-                }
-                output << std::endl;
-            }
-        } else {
-            output << "Stop " << cd.id << ": not found" << std::endl;
-        }
+        PrintStop(transport_catalogue, cd.id, output);
     }
     if (cd.command == "Bus") {
-        if (transport_catalogue.FindBus(cd.id)) {
-            output << request << ": " << transport_catalogue.GetBusInfo(cd.id).stops_count
-                << " stops on route, " << transport_catalogue.GetBusInfo(cd.id).unique_stops_count
-                << " unique stops, " << std::setprecision(6) << transport_catalogue.GetBusInfo(cd.id).route_length
-                << " route length" << std::endl;
-        } else {
-            output << request << ": not found" << std::endl;
-        }
-    }
+        PrintBus(transport_catalogue, cd.id, output);
+    }    
 }
