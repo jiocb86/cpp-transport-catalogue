@@ -26,8 +26,8 @@ const catalogue::Bus* catalogue::TransportCatalogue::FindBus(const std::string_v
 
 const std::unordered_set<const catalogue::Bus*> catalogue::TransportCatalogue::FindBusesForStop(const std::string_view stop_name) const {
     const Stop* stop_ptr = FindStop(stop_name);    
-    if (busname_to_stop_.count(stop_ptr)) {
-        return busname_to_stop_.at(stop_ptr);
+    if (buses_for_stop_.count(stop_ptr)) {
+        return buses_for_stop_.at(stop_ptr);
     }
     return {};
 }
@@ -67,7 +67,7 @@ void catalogue::TransportCatalogue::AddBusesForStop(const Stop& stop) {
         const auto& route = FindBus(bus.number)->route;            
         for (const auto& stop : route) {
             if (stop_ptr == stop){            
-                busname_to_stop_[stop_ptr].insert(FindBus(bus.number));
+                buses_for_stop_[stop_ptr].insert(FindBus(bus.number));
             }
         }
     }
