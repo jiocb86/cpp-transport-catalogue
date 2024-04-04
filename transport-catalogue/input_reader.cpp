@@ -1,48 +1,128 @@
-#pragma once
+#include "input_reader.h"
 
 #include <algorithm>
-#include <deque>
-#include <string>
-#include <string_view>
-#include <unordered_map>
-#include <unordered_set>
-#include <vector>
-#include <set>
+#include <cassert>
+#include <iterator>
 
-#include "geo.h"
+namespace detail{
+/**
+ * Парсит строку вида "10.123,  -30.1837" и возвращает пару координат (широта, долгота)
+ */
+catalogue::geo::Coordinates ParseCoordinates(std::string_view str) {
+    static const double nan = std::nan("");
 
-namespace catalogue {
-struct Stop {
-    std::string name;
-    geo::Coordinates coordinates;
-};
+    auto not_space = str.find_first_not_of(' ');
+    auto comma = str.find(',');
 
-struct Bus {
-    std::string number;
-    std::vector<const Stop*> route;
-};
+    if (comma == str.npos) {
+        return {nan, nan};
+    }
 
-struct BusInfo {
-    int stops_count;
-    int unique_stops_count;
-    double route_length;
-};
+    auto not_space2 = str.find_first_not_of(' ', comma + 1);
 
-class TransportCatalogue {
-    public:
-        void AddStop(const Stop& stop);                                                                //добавить остановку в базу
-        const Stop* FindStop(const std::string_view stop) const;                                       //поиск остановки по имени 
-        void AddBus(const Bus& bus);                                                                   //добавить маршрут в базу
-        const Bus* FindBus(const std::string_view bus) const;                                          //поиск маршрута по имени
-        const BusInfo GetBusInfo(const std::string_view bus) const;                                    //получить информацию о маршруте
-        void AddBusesForStop(const Stop& stop);                                                        //добавить автобусы проходящие через остановку
-        const std::unordered_set<const Bus*> FindBusesForStop(const std::string_view stop_name) const; //поиск автобусов проходящих через остановку 
-        const std::set<std::string_view> GetStopInfo(const std::string_view stop_name) const;          //получить информацию об остановке
-    private:
-        std::deque<Stop> stops_;                                                                       //остановки
-        std::deque<Bus> buses_;                                                                        //маршруты
-        std::unordered_map<std::string_view, const Bus*> busname_to_bus_;                              //индекс остановок(хеш - таблица)
-        std::unordered_map<std::string_view, const Stop*> stopname_to_stop_;                           //индекс маршрутов(хеш - таблица)
-        std::unordered_map<const Stop*, std::unordered_set<const Bus*>> buses_for_stop_;              //автобусы проходящие через остановку
-};
+    double lat = std::stod(std::string(str.substr(not_space, comma - not_space)));
+    double lng = std::stod(std::string(str.substr(not_space2)));
+
+    return {lat, lng};
+}
+
+/**
+ * Удаляет пробелы в начале и конце строки
+ */
+std::string_view Trim(std::string_view string) {
+    const auto start = string.find_first_not_of(' ');
+    if (start == string.npos) {
+        return {};
+    }
+    return string.substr(start, string.find_last_not_of(' ') + 1 - start);
+}
+
+/**
+ * Разбивает строку string на n строк, с помощью указанного символа-разделителя delim
+ */
+std::vector<std::string_view> Split(std::string_view string, char delim) {
+    std::vector<std::string_view> result;
+
+    size_t pos = 0;
+    while ((pos = string.find_first_not_of(' ', pos)) < string.length()) {
+        auto delim_pos = string.find(delim, pos);
+        if (delim_pos == string.npos) {
+            delim_pos = string.size();
+        }
+        if (auto substr = Trim(string.substr(pos, delim_pos - pos)); !substr.empty()) {
+            result.push_back(substr);
+        }
+        pos = delim_pos + 1;
+    }
+
+    return result;
+}
+
+/**
+ * Парсит маршрут.
+ * Для кольцевого маршрута (A>B>C>A) возвращает массив названий остановок [A,B,C,A]
+ * Для некольцевого маршрута (A-B-C-D) возвращает массив названий остановок [A,B,C,D,C,B,A]
+ */
+std::vector<std::string_view> ParseRoute(std::string_view route) {
+    if (route.find('>') != route.npos) {
+        return Split(route, '>');
+    }
+
+    auto stops = Split(route, '-');
+    std::vector<std::string_view> results(stops.begin(), stops.end());
+    results.insert(results.end(), std::next(stops.rbegin()), stops.rend());
+
+    return results;
+}
+
+reader::CommandDescription ParseCommandDescription(std::string_view line) {
+    auto colon_pos = line.find(':');
+    if (colon_pos == line.npos) {
+        return {};
+    }
+
+    auto space_pos = line.find(' ');
+    if (space_pos >= colon_pos) {
+        return {};
+    }
+
+    auto not_space = line.find_first_not_of(' ', space_pos);
+    if (not_space >= colon_pos) {
+        return {};
+    }
+
+    return {std::string(line.substr(0, space_pos)),
+            std::string(line.substr(not_space, colon_pos - not_space)),
+            std::string(line.substr(colon_pos + 1))};
+}
+}
+    
+void detail::reader::InputReader::ParseLine(std::string_view line) {
+    auto command_description = ParseCommandDescription(line);
+    if (command_description) {
+        commands_.push_back(std::move(command_description));
+    }
+}
+
+void detail::reader::InputReader::ApplyCommands([[maybe_unused]] catalogue::TransportCatalogue& catalogue) const {
+    for (const auto& cd : commands_) {
+        if (cd.command == "Stop") {
+            catalogue::Stop stop;
+            stop.name = cd.id;
+            stop.coordinates = ParseCoordinates(cd.description);
+            catalogue.AddStop(stop);
+        }
+    }
+    for (const auto& cd : commands_) {    
+        if (cd.command == "Bus") {
+            catalogue::Bus bus;
+            bus.number = cd.id;
+            std::vector<std::string_view> route = ParseRoute(cd.description);
+            for (const auto& stop : route) {
+                const catalogue::Stop* stop_ptr = catalogue.FindStop(stop);
+                bus.route.push_back(stop_ptr);
+            }
+            catalogue.AddBus(bus);
+        }
+    }
 }
