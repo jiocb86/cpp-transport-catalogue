@@ -9,6 +9,8 @@
 
 namespace detail {
 namespace outstat {
+void PrintStop(catalogue::TransportCatalogue& transport_catalogue, std::string_view request, std::ostream& output);
+void PrintBus(catalogue::TransportCatalogue& transport_catalogue, std::string_view request, std::ostream& output);
 void ParseAndPrintStat(catalogue::TransportCatalogue& transport_catalogue, std::string_view request, std::ostream& output);
 }
 }
