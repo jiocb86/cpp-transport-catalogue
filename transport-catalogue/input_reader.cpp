@@ -58,6 +58,20 @@ std::vector<std::string_view> Split(std::string_view string, char delim) {
     return result;
 }
 
+std::vector<std::pair<std::string_view, int>> ParseDistances(std::string_view line) {
+    std::vector<std::pair<std::string_view, int>> result;
+    std::vector<std::string_view> stops_dist = Split(line, ',');
+    for (auto stop_dist : stops_dist) {
+        auto m_to_pos = stop_dist.find("m to");
+        if (m_to_pos < stop_dist.length()) {
+            auto dist = std::stoi(std::string(Trim(stop_dist.substr(0, m_to_pos))));
+            auto stop = Trim(stop_dist.substr(m_to_pos + 4));
+            result.push_back(make_pair(std::move(stop), dist));
+        }
+    }
+    return result;
+}
+
 /**
  * Парсит маршрут.
  * Для кольцевого маршрута (A>B>C>A) возвращает массив названий остановок [A,B,C,A]
@@ -103,7 +117,8 @@ void detail::reader::InputReader::ParseLine(std::string_view line) {
         commands_.push_back(std::move(command_description));
     }
 }
-
+    
+#include <iostream>    
 void detail::reader::InputReader::ApplyCommands([[maybe_unused]] catalogue::TransportCatalogue& catalogue) const {
     for (const auto& cd : commands_) {
         if (cd.command == "Stop") {
@@ -111,6 +126,16 @@ void detail::reader::InputReader::ApplyCommands([[maybe_unused]] catalogue::Tran
             stop.name = cd.id;
             stop.coordinates = ParseCoordinates(cd.description);
             catalogue.AddStop(stop);
+        }
+    }
+    for (const auto& cd : commands_) {
+        if (cd.command == "Stop") {
+            const catalogue::Stop* stop_from = catalogue.FindStop(cd.id);
+            std::vector<std::pair<std::string_view, int>> dist = ParseDistances(cd.description);
+            for (std::vector<std::pair<std::string_view,int> >::iterator it = dist.begin(); it != dist.end(); ++it) {
+                const catalogue::Stop* stop_to = catalogue.FindStop(it->first);
+                catalogue.SetDistance(stop_from, stop_to, it->second);
+            }    
         }
     }
     for (const auto& cd : commands_) {    
