@@ -44,8 +44,10 @@ void detail::outstat::PrintBus(catalogue::TransportCatalogue& transport_catalogu
     if (transport_catalogue.FindBus(request)) {
         output << "Bus " << request << ": " << transport_catalogue.GetBusInfo(request).stops_count
         << " stops on route, " << transport_catalogue.GetBusInfo(request).unique_stops_count
-        << " unique stops, " << std::setprecision(6) << transport_catalogue.GetBusInfo(request).route_length
-        << " route length" << std::endl;
+        << " unique stops, " << transport_catalogue.GetBusInfo(request).dist_length
+        << " route length, " << std::setprecision(6)
+        << (transport_catalogue.GetBusInfo(request).dist_length/transport_catalogue.GetBusInfo(request).geo_length)
+        << " curvature" << std::endl;
     } else {
         output << "Bus " << request << ": not found" << std::endl;
     }    
