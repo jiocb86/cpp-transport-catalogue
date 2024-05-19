@@ -55,7 +55,17 @@ const catalogue::BusInfo catalogue::TransportCatalogue::GetBusInfo(const std::st
                 const catalogue::Stop* next_stop = route[i];
                 route_length += ComputeDistance(current_stop->coordinates, next_stop->coordinates);
             }
-            bus_info.route_length = route_length;           
+            bus_info.geo_length = route_length;           
+        }
+        {
+            int route_length = 0;
+            const auto& route = FindBus(bus->number)->route;
+            for (int i = 1; i < route.size(); ++i) {
+                const catalogue::Stop* current_stop = route[i - 1];
+                const catalogue::Stop* next_stop = route[i];
+                route_length += GetDistance(current_stop, next_stop);
+            }
+            bus_info.dist_length = route_length;           
         }
     }
     return bus_info;
@@ -84,4 +94,17 @@ const std::set<std::string_view> catalogue::TransportCatalogue::GetStopInfo(cons
         }
     }
     return buses;
+}
+
+void catalogue::TransportCatalogue::SetDistance(const Stop* from, const Stop* to, const int dist) {
+    distances_[{from, to}] = dist;
+}
+
+int catalogue::TransportCatalogue::GetDistance(const Stop* from, const Stop* to) const {
+    if (distances_.count({ from, to })) {
+        return distances_.at({ from, to });
+    } else if (distances_.count({ to, from })) {
+        return distances_.at({ to, from });
+    }
+    return 0;
 }
