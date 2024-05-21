@@ -150,4 +150,11 @@ void detail::reader::InputReader::ApplyCommands([[maybe_unused]] catalogue::Tran
             catalogue.AddBus(bus);
         }
     }
+    for (const auto& cd : commands_) {
+        if (cd.command == "Stop") {    
+            catalogue::Stop stop;
+            stop.name = cd.id;
+            catalogue.AddBusesForStop(stop); 
+        }
+    }
 }
