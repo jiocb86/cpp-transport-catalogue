@@ -21,9 +21,6 @@ detail::reader::CommandDescription ParseCommands([[maybe_unused]]std::string_vie
 
 void detail::outstat::PrintStop(catalogue::TransportCatalogue& transport_catalogue, std::string_view request, std::ostream& output) {
     if (transport_catalogue.FindStop(request)) {
-        catalogue::Stop stop;
-        stop.name = request;
-        transport_catalogue.AddBusesForStop(stop);
         std::set<std::string_view> buses = transport_catalogue.GetStopInfo(request);
         output << "Stop " << request << ": ";
         if (buses.empty()) {
