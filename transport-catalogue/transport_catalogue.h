@@ -4,30 +4,16 @@
 #include <deque>
 #include <string>
 #include <string_view>
+#include <map>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 #include <set>
 
 #include "geo.h"
+#include "domain.h"
 
 namespace catalogue {
-struct Stop {
-    std::string name;
-    geo::Coordinates coordinates;
-};
-
-struct Bus {
-    std::string number;
-    std::vector<const Stop*> route;
-};
-
-struct BusInfo {
-    int stops_count;
-    int unique_stops_count;
-    double geo_length;
-    int dist_length;
-};
 
 class TransportCatalogue {
     public:
@@ -50,9 +36,6 @@ class TransportCatalogue {
         //получить информацию о маршруте    
         const BusInfo GetBusInfo(const std::string_view bus) const;         
     
-        //добавить автобусы проходящие через остановку
-        void AddBusesForStop(const Stop& stop);                                                        
-    
         //поиск автобусов проходящих через остановку 
         const std::unordered_set<const Bus*> FindBusesForStop(const std::string_view stop_name) const; 
     
@@ -63,7 +46,10 @@ class TransportCatalogue {
         void SetDistance(const Stop* from, const Stop* to, const int distance);                        
     
         //получить дистанцию между остановками
-        int GetDistance(const Stop* from, const Stop* to) const;                                       
+        int GetDistance(const Stop* from, const Stop* to) const;         
+    
+        //получить отсортированные маршруты
+        const std::map<std::string_view, const Bus*> GetSortedAllBuses() const;   
     private:
         std::deque<Stop> stops_;                                                                       
         std::deque<Bus> buses_;                                                                        
@@ -80,4 +66,4 @@ class TransportCatalogue {
         //расстояние между остановками
         std::unordered_map<std::pair<const Stop*, const Stop*>, int, StopPairHasher> distances_;       
 };
-}
+} // namespace catalogue
