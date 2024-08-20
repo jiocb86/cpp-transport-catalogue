@@ -106,6 +106,16 @@ public:
     std::vector<svg::Text> GetBusLabel(const std::map<std::string_view, const catalogue::Bus*>& buses, const SphereProjector& sp) const;
     std::vector<svg::Circle> GetStopsSymbols(const std::map<std::string_view, const catalogue::Stop*>& stops, const SphereProjector& sp) const;
     std::vector<svg::Text> GetStopsLabels(const std::map<std::string_view, const catalogue::Stop*>& stops, const SphereProjector& sp) const;    
+    // Метод для коллекции остановок
+    void CollectRouteStops(const std::map<std::string_view, const catalogue::Bus*>& buses, std::vector<geo::Coordinates>& route_stops_coord, std::map<std::string_view, const catalogue::Stop*>& stops) const;
+    // Метод для добавления линий маршрутов
+    void AddRouteLines(svg::Document& result, const std::map<std::string_view, const catalogue::Bus*>& buses, const SphereProjector& sp) const;
+    // Метод для добавления надписей автобусов
+    void AddBusLabels(svg::Document& result, const std::map<std::string_view, const catalogue::Bus*>& buses, const SphereProjector& sp) const;
+    // Метод для добавления символов остановок
+    void AddStopsSymbols(svg::Document& result, const std::map<std::string_view, const catalogue::Stop*>& stops, const SphereProjector& sp) const;
+    // Метод для добавления надписей остановок
+    void AddStopsLabels(svg::Document& result, const std::map<std::string_view, const catalogue::Stop*>& stops, const SphereProjector& sp) const;
     
     svg::Document GetSVG(const std::map<std::string_view, const catalogue::Bus*>& buses) const;
     
