@@ -120,28 +120,64 @@ std::vector<svg::Text> MapRenderer::GetStopsLabels(const std::map<std::string_vi
     }
     
     return result;
-}    
-
+}
+    
 svg::Document MapRenderer::GetSVG(const std::map<std::string_view, const catalogue::Bus*>& buses) const {
     svg::Document result;
     std::vector<geo::Coordinates> route_stops_coord;
     std::map<std::string_view, const catalogue::Stop*> stops;
     
+    // Сбор координат остановок и их объектов по маршруту автобусов
+    CollectRouteStops(buses, route_stops_coord, stops);
+    
+    SphereProjector sp(route_stops_coord.begin(), route_stops_coord.end(), render_settings_.width, render_settings_.height, render_settings_.padding);
+    
+    // Добавление линий маршрутов
+    AddRouteLines(result, buses, sp);
+    // Добавление надписей автобусов
+    AddBusLabels(result, buses, sp);
+    // Добавление символов остановок
+    AddStopsSymbols(result, stops, sp);
+    // Добавление надписей остановок
+    AddStopsLabels(result, stops, sp);
+    
+    return result;
+}
+
+void MapRenderer::CollectRouteStops(const std::map<std::string_view, const catalogue::Bus*>& buses, std::vector<geo::Coordinates>& route_stops_coord, std::map<std::string_view, const catalogue::Stop*>& stops) const {
     for (const auto& [bus_number, bus] : buses) {
-        if (bus->route.empty()) continue;
+        if (bus->route.empty()) {
+            continue;
+        }
         for (const auto& stop : bus->route) {
             route_stops_coord.push_back(stop->coordinates);
             stops[stop->name] = stop;
         }
     }
-    SphereProjector sp(route_stops_coord.begin(), route_stops_coord.end(), render_settings_.width, render_settings_.height, render_settings_.padding);
-    
-    for (const auto& line : GetRouteLines(buses, sp)) result.Add(line);
-    for (const auto& text : GetBusLabel(buses, sp)) result.Add(text);
-    for (const auto& circle : GetStopsSymbols(stops, sp)) result.Add(circle);
-    for (const auto& text : GetStopsLabels(stops, sp)) result.Add(text);
+}
 
-    return result;
+void MapRenderer::AddRouteLines(svg::Document& result, const std::map<std::string_view, const catalogue::Bus*>& buses, const SphereProjector& sp) const {
+    for (const auto& line : GetRouteLines(buses, sp)) {
+        result.Add(line);
+    }
+}
+
+void MapRenderer::AddBusLabels(svg::Document& result, const std::map<std::string_view, const catalogue::Bus*>& buses, const SphereProjector& sp) const {
+    for (const auto& text : GetBusLabel(buses, sp)) {
+        result.Add(text);
+    }
+}
+
+void MapRenderer::AddStopsSymbols(svg::Document& result, const std::map<std::string_view, const catalogue::Stop*>& stops, const SphereProjector& sp) const {
+    for (const auto& circle : GetStopsSymbols(stops, sp)) {
+        result.Add(circle);
+    }
+}
+
+void MapRenderer::AddStopsLabels(svg::Document& result, const std::map<std::string_view, const catalogue::Stop*>& stops, const SphereProjector& sp) const {
+    for (const auto& text : GetStopsLabels(stops, sp)) {
+        result.Add(text);
+    }
 }
 
 } // namespace renderer
