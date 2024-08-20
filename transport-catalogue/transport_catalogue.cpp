@@ -16,23 +16,26 @@ void catalogue::TransportCatalogue::AddBus(const Bus& bus){
 }
 
 const catalogue::Stop* catalogue::TransportCatalogue::FindStop(const std::string_view stop) const {
-    if (stopname_to_stop_.count(stop)) {
-        return stopname_to_stop_.at(stop);
+    auto it = stopname_to_stop_.find(stop);
+    if (it != stopname_to_stop_.end()) {
+        return it->second;
     }
     return nullptr;
 }
 
 const catalogue::Bus* catalogue::TransportCatalogue::FindBus(const std::string_view bus) const {
-    if (busname_to_bus_.count(bus)) {
-        return busname_to_bus_.at(bus);
+    auto it = busname_to_bus_.find(bus);
+    if (it != busname_to_bus_.end()) {
+        return it->second;
     }
     return nullptr;
 }
 
 const std::unordered_set<const catalogue::Bus*> catalogue::TransportCatalogue::FindBusesForStop(const std::string_view stop_name) const {
     const Stop* stop_ptr = FindStop(stop_name);    
-    if (buses_for_stop_.count(stop_ptr)) {
-        return buses_for_stop_.at(stop_ptr);
+    auto it = buses_for_stop_.find(stop_ptr);
+    if (it != buses_for_stop_.end()) {
+        return it->second;
     }
     return {};
 }
@@ -96,10 +99,13 @@ void catalogue::TransportCatalogue::SetDistance(const Stop* from, const Stop* to
 }
 
 int catalogue::TransportCatalogue::GetDistance(const Stop* from, const Stop* to) const {
-    if (distances_.count({ from, to })) {
-        return distances_.at({ from, to });
-    } else if (distances_.count({ to, from })) {
-        return distances_.at({ to, from });
+    auto it = distances_.find({ from, to });
+    if (it != distances_.end()) {
+        return it->second;
+    }
+    it = distances_.find({ to, from });
+    if (it != distances_.end()) {
+        return it->second;
     }
     return 0;
 }
