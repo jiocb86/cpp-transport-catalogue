@@ -11,6 +11,8 @@ public:
     {
     }
 
+    //void ParseStatRequests(const json::Node& stat_requests) const;
+    
     catalogue::BusInfo GetBusStat(const std::string_view& bus_number) const;
     const std::set<std::string_view> GetBusesByStop(std::string_view stop_name) const;
     bool IsBusNumber(const std::string_view bus_number) const;
