@@ -23,4 +23,4 @@ struct BusInfo {
     double geo_length;
     int dist_length;
 };
-} // namespace catalogue
+} // namespace catalogue    
