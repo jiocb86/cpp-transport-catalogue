@@ -1,439 +1,219 @@
-#include "json.h"
- 
-using namespace std;
-namespace json {
-namespace {
- 
-Node LoadNode(istream& input);
- 
-std::string LoadLiteral(std::istream& input) {
-    std::string str;
-    
-    while (std::isalpha(input.peek())) {
-        str.push_back(static_cast<char>(input.get()));
-    }
-    return str;
-}
- 
-Node LoadArray(std::istream& input) {
-    std::vector<Node> array;
-    
-    for (char ch; input >> ch && ch != ']';) {
-        if (ch != ',') {
-            input.putback(ch);
-        }
-        
-        array.push_back(LoadNode(input));
-    }
- 
-    if (!input) {
-        throw ParsingError("unable to parse array"s);
-    }
- 
-    return Node(array);
-}
- 
-Node LoadNull(std::istream& input) {
-    if (auto literal = LoadLiteral(input); literal == "null"sv) {
-        return Node(nullptr);
-    } else {
-        throw ParsingError("unable to parse '"s + literal + "' as null"s);
-    }
-}
- 
-Node LoadBool(std::istream& input) {
-    const auto str = LoadLiteral(input);
- 
-    if (str == "true"sv) {
-        return Node(true);
-    } else if (str == "false"sv) {
-        return Node(false);
-    }
-    throw ParsingError("unable to parse '"s + str + "' as bool"s);
-}
- 
-Node LoadNumber(std::istream& input) {
-    std::string number;
- 
-    auto read_char = [&number, &input] {
-        number += static_cast<char>(input.get());
-        
-        if (!input) {
-            throw ParsingError("unable to read number"s);
-        }
-    };
- 
-    auto read_digits = [&input, read_char] {
-        
-        if (!std::isdigit(input.peek())) {
-            throw ParsingError("A digit is expected"s);
-        } else {
-            while (std::isdigit(input.peek())) {
-                read_char();
-            }   
-        }
-    };
- 
-    if (input.peek() == '-') {
-        read_char();
-    }
- 
-    if (input.peek() == '0') {
-        read_char();
-    } else {
-        read_digits();
-    }
- 
-    bool is_int = true;
-    if (input.peek() == '.') {
-        read_char();
-        read_digits();
-        is_int = false;
-    }
- 
-    if (int ch = input.peek(); ch == 'e' || ch == 'E') {
-        read_char();
-        
-        if (ch = input.peek(); ch == '+' || ch == '-') {
-            read_char();
-        }
- 
-        read_digits();
-        is_int = false;
-    }
- 
-    try {
-        if (is_int) {
-            try {
-                return Node(std::stoi(number));
-                
-            } catch (...) {}
-        }
-        return Node(std::stod(number));
-        
-    } catch (...) {
-        throw ParsingError("unable to convert "s + number + " to number"s);
-    }
-}
- 
-Node LoadString(std::istream& input) {
-    auto it = std::istreambuf_iterator<char>(input);
-    auto end = std::istreambuf_iterator<char>();
-    std::string str;
-    
-    while (true) {
-        if (it == end) {
-            throw ParsingError("unable to parse string");
-        }
-        
-        const char ch = *it;
-        if (ch == '"') {
-            ++it;
-            break;
-            
-        } else if (ch == '\\') {
-            ++it;
-            if (it == end) {
-                throw ParsingError("unable to parse string");
-            }
-            
-            const char esc_ch = *(it);
-            switch (esc_ch) {
-                case 'n':
-                    str.push_back('\n');
-                    break;
-                case 't':
-                    str.push_back('\t');
-                    break;
-                case 'r':
-                    str.push_back('\r');
-                    break;
-                case '"':
-                    str.push_back('"');
-                    break;
-                case '\\':
-                    str.push_back('\\');
-                    break;
-                default:
-                    throw ParsingError("invalid esc \\"s + esc_ch);
-            }
-            
-        } else if (ch == '\n' || ch == '\r') {
-            throw ParsingError("invalid line end"s);
-        } else {
-            str.push_back(ch);
-        }
-        
-        ++it;
-    }
-    
-    return Node(str);
-}
- 
-Node LoadDict(std::istream& input) {
-    Dict dictionary;
- 
-    for (char ch; input >> ch && ch != '}';) {
-        
-        if (ch == '"') {
-            std::string key = LoadString(input).AsString();
- 
-            if (input >> ch && ch == ':') {
-                
-                if (dictionary.find(key) != dictionary.end()) {
-                    throw ParsingError("duplicate key '"s + key + "'found");
-                }
- 
-                dictionary.emplace(std::move(key), LoadNode(input));
-                
-            } else {
-                throw ParsingError(": expected. but '"s + ch + "' found"s);
-            }
-            
-        } else if (ch != ',') {
-            throw ParsingError("',' expected. but '"s + ch + "' found"s);
-        }
-    }
- 
-    if (!input) {
-        throw ParsingError("unable to parse dictionary"s);
-    }
-    return Node(dictionary);
-}
- 
-Node LoadNode(std::istream& input) {
-    char ch;
-    
-    if (!(input >> ch)) {
-        throw ParsingError(""s);
-    } else {
-        switch (ch) {
-        case '[':
-            return LoadArray(input);
-        case '{':
-            return LoadDict(input);
-        case '"':
-            return LoadString(input);
-        case 't': case 'f':
-            input.putback(ch);
-            return LoadBool(input);
-        case 'n':
-            input.putback(ch);
-            return LoadNull(input);
-        default:
-            input.putback(ch);
-            return LoadNumber(input);
-        }
-    }
-}
- 
-}//end namespace
+#include "json_reader.h"
+#include "json_builder.h"
 
-const Array& Node::AsArray() const {
-    using namespace std::literals;
-    
-    if (!IsArray()) {
-        throw std::logic_error("value is not an array"s);
+namespace reader {
+
+const json::Node& JsonReader::GetBaseRequests() const {
+    auto it = input_.GetRoot().AsMap().find("base_requests");
+    if (it == input_.GetRoot().AsMap().end()) {
+        return dummy_;
     }
-    return std::get<Array>(*this); 
+    return it->second;
 }
- 
-const Dict& Node::AsMap() const {
-    using namespace std::literals;
     
-    if (!IsMap()) {
-        throw std::logic_error("value is not a dictionary"s);
+const json::Node& JsonReader::GetStatRequests() const {
+    auto it = input_.GetRoot().AsMap().find("stat_requests");
+    if (it == input_.GetRoot().AsMap().end()) {
+        return dummy_;
+    } 
+    return it->second;
+}
+
+const json::Node& JsonReader::GetRenderSettings() const {
+    auto it = input_.GetRoot().AsMap().find("render_settings");
+    if (it == input_.GetRoot().AsMap().end()) {
+        return dummy_;
     }
-    return std::get<Dict>(*this);  
-}
- 
-const string& Node::AsString() const {
-    using namespace std::literals;
-    
-    if (!IsString()) {
-        throw std::logic_error("value is not a string"s);
-    }
-    return std::get<std::string>(*this);        
+    return it->second;
 }
     
-int Node::AsInt() const {
-    using namespace std::literals; 
-    
-    if (!IsInt()) {
-        throw std::logic_error("value is not an int"s);
-    }
-    return std::get<int>(*this);    
-}
- 
-double Node::AsDouble() const {
-    using namespace std::literals;
-    
-    if (!IsDouble()) {
-        throw std::logic_error("value is not a double"s);
-    } else if (IsPureDouble()) {
-        return std::get<double>(*this);
-    }
-    return AsInt();
-}
- 
-bool Node::AsBool() const {
-    using namespace std::literals;
-    
-    if (!IsBool()) {
-        throw std::logic_error("value is not a bool"s);
-    }
-    return std::get<bool>(*this);   
-}
-    
-bool Node::IsNull() const {
-    return std::holds_alternative<std::nullptr_t>(*this);
-}    
-bool Node::IsInt() const {
-    return std::holds_alternative<int>(*this);
-}
-bool Node::IsDouble() const {
-    return IsPureDouble() || IsInt();
-}   
-bool Node::IsPureDouble() const {
-    return std::holds_alternative<double>(*this);
-}    
-bool Node::IsBool() const {
-    return std::holds_alternative<bool>(*this);
-}    
-bool Node::IsString() const {
-    return std::holds_alternative<std::string>(*this);
-}    
-bool Node::IsArray() const {
-    return std::holds_alternative<Array>(*this);
-}   
-bool Node::IsMap() const {
-    return std::holds_alternative<Dict>(*this);
-}
-       
-Document::Document(Node root) : root_(std::move(root)) {}
-const Node& Document::GetRoot() const {return root_;}
-Document Load(istream& input) {return Document{LoadNode(input)};}
- 
-struct PrintContext {
-    std::ostream& out;
-    int indent_step = 4;
-    int indent = 0;
- 
-    void PrintIndent() const {
-        for (int i = 0; i < indent; ++i) {
-            out.put(' ');
+void JsonReader::ParseBaseRequests() {    
+    const json::Array& arr = GetBaseRequests().AsArray();    
+    for (const auto& request : arr) {
+        const auto& request_map = request.AsMap();
+        std::string_view command = request_map.at("type").AsString();
+        std::string_view id = request_map.at("name").AsString();
+        if (command == "Stop") {
+            double lat = request_map.at("latitude").AsDouble();
+            double lng = request_map.at("longitude").AsDouble();
+            geo::Coordinates coordinates{lat, lng};
+            std::vector<std::pair<std::string_view, int>> road_distances;
+            auto& distances = request_map.at("road_distances").AsMap();
+            for (auto& [name, distance] : distances) {
+                road_distances.emplace_back(name, distance.AsInt());
+            }            
+            commands_.emplace_back(command, id, coordinates, road_distances);            
+        } else if (command == "Bus") {
+            std::vector<std::string_view> route;
+            for (const auto& stop : request_map.at("stops").AsArray()) {
+                route.emplace_back(stop.AsString());
+            }
+            bool is_roundtrip = request_map.at("is_roundtrip").AsBool();            
+            commands_.emplace_back(command, id, route, is_roundtrip);
         }
     }
- 
-    [[nodiscard]] PrintContext Indented() const {
-        return {out, 
-                indent_step, 
-                indent + indent_step};
-    }
-};
- 
-void PrintNode(const Node& node, const PrintContext& context);
+}
     
- 
-void PrintString(const std::string& value, std::ostream& out) {
-    out.put('"');
-    for (const char c : value) {
-        switch (c) {
-            case '\r':
-                out << "\\r"sv;
-                break;
-            case '\n':
-                out << "\\n"sv;
-                break;
-            case '\t':
-                out << "\\t"sv;
-                break;
-            case '"':
-                // Символы " и \ выводятся как \" или \\, соответственно
-                [[fallthrough]];
-            case '\\':
-                out.put('\\');
-                [[fallthrough]];
-            default:
-                out.put(c);
-                break;
+void JsonReader::ApplyCommands([[maybe_unused]]catalogue::TransportCatalogue& catalogue) const {
+    for (const auto& cd : commands_) {
+        if (cd.command == "Stop") {
+            catalogue::Stop stop;
+            stop.name = cd.id;
+            stop.coordinates = std::get<geo::Coordinates>(cd.description);
+            catalogue.AddStop(stop);
         }
     }
-    out.put('"');
+    for (const auto& cd : commands_) {
+        if (cd.command == "Stop") {
+            const catalogue::Stop* stop_from = catalogue.FindStop(cd.id);
+            std::vector<std::pair<std::string_view, int>> dist = std::get<std::vector<std::pair<std::string_view, int>>>(cd.details);
+            for (std::vector<std::pair<std::string_view,int> >::iterator it = dist.begin(); it != dist.end(); ++it) {
+                const catalogue::Stop* stop_to = catalogue.FindStop(it->first);
+                catalogue.SetDistance(stop_from, stop_to, it->second);
+            }    
+        }
+    }
+    for (const auto& cd : commands_) {    
+        if (cd.command == "Bus") {
+            catalogue::Bus bus;
+            bus.number = cd.id;
+            std::vector<std::string_view> route = std::get<std::vector<std::string_view>>(cd.description);
+            for (const auto& stop : route) {
+                const catalogue::Stop* stop_ptr = catalogue.FindStop(stop);
+                bus.route.push_back(stop_ptr);
+            }
+            bus.is_circle = std::get<bool>(cd.details);
+            catalogue.AddBus(bus);
+        }
+    }
 }
- 
-template <typename Value>
-void PrintValue(const Value& value, const PrintContext& context) {
-    context.out << value;
-}
- 
-template <>
-void PrintValue<std::string>(const std::string& value, const PrintContext& context) {
-    PrintString(value, context.out);
-}
- 
-void PrintValue(const std::nullptr_t&, const PrintContext& context) {
-    context.out << "null"s;
-}
- 
-void PrintValue(bool value, const PrintContext& context) {
-    context.out << std::boolalpha << value;
-}
- 
-[[maybe_unused]] void PrintValue(Array nodes, const PrintContext& context) {
-    std::ostream& out = context.out;
-    out << "[\n"sv;
-    bool first = true;
-    auto inner_context = context.Indented();
     
-    for (const Node& node : nodes) {
-        if (first) {
-            first = false;
+svg::Color JsonReader::ParseColor(const json::Node& color_node) const {
+    if (color_node.IsString()) {
+        return color_node.AsString();
+    } else if (color_node.IsArray()) {
+        const json::Array& color_array = color_node.AsArray();
+        if (color_array.size() == 3) {
+            return svg::Rgb(color_array[0].AsInt(), color_array[1].AsInt(), color_array[2].AsInt());
+        } else if (color_array.size() == 4) {
+            return svg::Rgba(color_array[0].AsInt(), color_array[1].AsInt(), color_array[2].AsInt(), color_array[3].AsDouble());
         } else {
-            out << ",\n"sv;
+            throw std::logic_error("wrong underlayer colortype");
         }
- 
-        inner_context.PrintIndent();
-        PrintNode(node, inner_context);
+    } else {
+        throw std::logic_error("wrong underlayer color");
     }
- 
-    out.put('\n');
-    context.PrintIndent();
-    out.put(']');
-}
- 
-[[maybe_unused]] void PrintValue(Dict nodes, const PrintContext& context) {
-    std::ostream& out = context.out;
-    out << "{\n"sv;
-    bool first = true;
-    auto inner_context = context.Indented();
+}    
     
-    for (const auto& [key, node] : nodes) {
-        if (first) {
-            first = false;
-        } else {
-            out << ",\n"sv;
-        }
- 
-        inner_context.PrintIndent();
-        PrintString(key, context.out);
-        out << ": "sv;
-        PrintNode(node, inner_context);
-    }
- 
-    out.put('\n');
-    context.PrintIndent();
-    out.put('}');
-}
- 
-void PrintNode(const Node& node, const PrintContext& context) {
-    std::visit([&context](const auto& value) {
-            PrintValue(value, context);
-        },node.GetValue());
+renderer::MapRenderer JsonReader::ParseRenderSettings(const json::Dict& request_map) const {
+    renderer::RenderSettings render_settings;
+    render_settings.width = request_map.at("width").AsDouble();
+    render_settings.height = request_map.at("height").AsDouble();
+    render_settings.padding = request_map.at("padding").AsDouble();
+    render_settings.stop_radius = request_map.at("stop_radius").AsDouble();
+    render_settings.line_width = request_map.at("line_width").AsDouble();
+    render_settings.bus_label_font_size = request_map.at("bus_label_font_size").AsInt();
+    const json::Array& bus_label_offset = request_map.at("bus_label_offset").AsArray();
+    render_settings.bus_label_offset = { bus_label_offset[0].AsDouble(), bus_label_offset[1].AsDouble() };
+    render_settings.stop_label_font_size = request_map.at("stop_label_font_size").AsInt();
+    const json::Array& stop_label_offset = request_map.at("stop_label_offset").AsArray();
+    render_settings.stop_label_offset = { stop_label_offset[0].AsDouble(), stop_label_offset[1].AsDouble() };
+    
+    render_settings.underlayer_color = ParseColor(request_map.at("underlayer_color"));
+    
+    render_settings.underlayer_width = request_map.at("underlayer_width").AsDouble();
+    
+    const json::Array& color_palette = request_map.at("color_palette").AsArray();
+    for (const auto& color_element : color_palette) {
+        render_settings.color_palette.push_back(ParseColor(color_element));
+    }    
+
+    return render_settings;
 }
     
-void Print(const Document& document, std::ostream& output) {
-    PrintNode(document.GetRoot(), PrintContext{output});
+const json::Node JsonReader::PrintRoute(const json::Dict& request_map, RequestHandler& rh) const {
+    json::Node result;
+    const std::string& route_number = request_map.at("name").AsString();
+    const int id = request_map.at("id").AsInt();
+    if (!rh.IsBusNumber(route_number)) {
+        result = json::Builder{}
+                    .StartDict()
+                        .Key("request_id").Value(id)
+                        .Key("error_message").Value("not found")
+                    .EndDict()
+                .Build();
+    } else {
+        result = json::Builder{}
+                    .StartDict()
+                        .Key("request_id").Value(id)
+                        .Key("curvature").Value(rh.GetBusStat(route_number).dist_length/rh.GetBusStat(route_number).geo_length)
+                        .Key("route_length").Value(rh.GetBusStat(route_number).dist_length)
+                        .Key("stop_count").Value(static_cast<int>(rh.GetBusStat(route_number).stops_count))
+                        .Key("unique_stop_count").Value(static_cast<int>(rh.GetBusStat(route_number).unique_stops_count))
+                    .EndDict()
+                .Build();
+    }
+    return result;
 }
- 
-} // namespace json
+
+const json::Node JsonReader::PrintStop(const json::Dict& request_map, RequestHandler& rh) const {
+    json::Node result;
+    const std::string& stop_name = request_map.at("name").AsString();
+    const int id = request_map.at("id").AsInt();
+    if (!rh.IsStopName(stop_name)) {
+        result = json::Builder{}
+                    .StartDict()
+                        .Key("request_id").Value(id)
+                        .Key("error_message").Value("not found")
+                    .EndDict()
+                .Build();
+    } else {
+        json::Array buses;
+        for (const auto& bus : rh.GetBusesByStop(stop_name)) {
+            buses.push_back(json::Node(std::string(bus)));
+        }
+        result = json::Builder{}
+                    .StartDict()
+                        .Key("request_id").Value(id)
+                        .Key("buses").Value(buses)
+                    .EndDict()
+                .Build();
+    }
+    return result;
+}
+
+const json::Node JsonReader::PrintMap(const json::Dict& request_map, RequestHandler& rh) const {
+    json::Node result;
+    const int id = request_map.at("id").AsInt();
+    std::ostringstream strm;
+    svg::Document map = rh.RenderMap();
+    map.Render(strm);
+    result = json::Builder{}
+                .StartDict()
+                    .Key("request_id").Value(id)
+                    .Key("map").Value(strm.str())
+                .EndDict()
+            .Build();
+    return result;    
+}
+    
+void JsonReader::ProcessRequests(const json::Node& stat_requests, RequestHandler& rh) const {
+    json::Array result;
+    for (auto& request : stat_requests.AsArray()) {
+        const auto& request_map = request.AsMap();
+        const auto& type = request_map.at("type").AsString();
+        if (type == "Stop") {
+            result.emplace_back(PrintStop(request_map, rh).AsMap());
+        }
+        if (type == "Bus") {
+            result.emplace_back(PrintRoute(request_map, rh).AsMap());
+        }
+        if (type == "Map") {
+            result.emplace_back(PrintMap(request_map, rh).AsMap());
+        }
+    }
+
+    json::Print(json::Document{ result }, std::cout);
+}    
+
+} // namespace reader
