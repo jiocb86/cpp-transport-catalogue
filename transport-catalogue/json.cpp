@@ -48,9 +48,8 @@ Node LoadBool(std::istream& input) {
         return Node(true);
     } else if (str == "false"sv) {
         return Node(false);
-    } else {
-        throw ParsingError("unable to parse '"s + str + "' as bool"s);
     }
+    throw ParsingError("unable to parse '"s + str + "' as bool"s);
 }
  
 Node LoadNumber(std::istream& input) {
@@ -198,10 +197,8 @@ Node LoadDict(std::istream& input) {
  
     if (!input) {
         throw ParsingError("unable to parse dictionary"s);
-    } else {
-        return Node(dictionary);
     }
-    
+    return Node(dictionary);
 }
  
 Node LoadNode(std::istream& input) {
@@ -231,23 +228,14 @@ Node LoadNode(std::istream& input) {
 }
  
 }//end namespace
-   
-Node::Node(Array array) : value_(std::move(array)) {}    
-Node::Node(std::nullptr_t) : Node() {}
-Node::Node(bool value) : value_(value) {}
-Node::Node(Dict map) : value_(std::move(map)) {}
-Node::Node(int value) : value_(value) {}
-Node::Node(string value) : value_(std::move(value)) {}
-Node::Node(double value) : value_(value) {}
-    
+
 const Array& Node::AsArray() const {
     using namespace std::literals;
     
     if (!IsArray()) {
         throw std::logic_error("value is not an array"s);
-    } else {
-        return std::get<Array>(value_); 
     }
+    return std::get<Array>(*this); 
 }
  
 const Dict& Node::AsMap() const {
@@ -255,9 +243,8 @@ const Dict& Node::AsMap() const {
     
     if (!IsMap()) {
         throw std::logic_error("value is not a dictionary"s);
-    } else {
-        return std::get<Dict>(value_);  
     }
+    return std::get<Dict>(*this);  
 }
  
 const string& Node::AsString() const {
@@ -265,9 +252,8 @@ const string& Node::AsString() const {
     
     if (!IsString()) {
         throw std::logic_error("value is not a string"s);
-    } else {
-        return std::get<std::string>(value_);        
     }
+    return std::get<std::string>(*this);        
 }
     
 int Node::AsInt() const {
@@ -275,9 +261,8 @@ int Node::AsInt() const {
     
     if (!IsInt()) {
         throw std::logic_error("value is not an int"s);
-    } else {
-        return std::get<int>(value_);    
     }
+    return std::get<int>(*this);    
 }
  
 double Node::AsDouble() const {
@@ -286,10 +271,9 @@ double Node::AsDouble() const {
     if (!IsDouble()) {
         throw std::logic_error("value is not a double"s);
     } else if (IsPureDouble()) {
-        return std::get<double>(value_);
-    } else {
-        return AsInt();
-    }    
+        return std::get<double>(*this);
+    }
+    return AsInt();
 }
  
 bool Node::AsBool() const {
@@ -297,19 +281,34 @@ bool Node::AsBool() const {
     
     if (!IsBool()) {
         throw std::logic_error("value is not a bool"s);
-    } else {
-        return std::get<bool>(value_);   
     }
+    return std::get<bool>(*this);   
 }
     
-bool Node::IsNull() const {return std::holds_alternative<std::nullptr_t>(value_);}    
-bool Node::IsInt() const {return std::holds_alternative<int>(value_);}
-bool Node::IsDouble() const {return IsPureDouble() || IsInt();}   
-bool Node::IsPureDouble() const {return std::holds_alternative<double>(value_);}    
-bool Node::IsBool() const {return std::holds_alternative<bool>(value_);}    
-bool Node::IsString() const {return std::holds_alternative<std::string>(value_);}    
-bool Node::IsArray() const {return std::holds_alternative<Array>(value_);}   
-bool Node::IsMap() const {return std::holds_alternative<Dict>(value_);}
+bool Node::IsNull() const {
+    return std::holds_alternative<std::nullptr_t>(*this);
+}    
+bool Node::IsInt() const {
+    return std::holds_alternative<int>(*this);
+}
+bool Node::IsDouble() const {
+    return IsPureDouble() || IsInt();
+}   
+bool Node::IsPureDouble() const {
+    return std::holds_alternative<double>(*this);
+}    
+bool Node::IsBool() const {
+    return std::holds_alternative<bool>(*this);
+}    
+bool Node::IsString() const {
+    return std::holds_alternative<std::string>(*this);
+}    
+bool Node::IsArray() const {
+    return std::holds_alternative<Array>(*this);
+}   
+bool Node::IsMap() const {
+    return std::holds_alternative<Dict>(*this);
+}
        
 Document::Document(Node root) : root_(std::move(root)) {}
 const Node& Document::GetRoot() const {return root_;}
