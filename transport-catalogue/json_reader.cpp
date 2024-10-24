@@ -4,24 +4,32 @@
 namespace reader {
 
 const json::Node& JsonReader::GetBaseRequests() const {
-    auto it = input_.GetRoot().AsMap().find("base_requests");
-    if (it == input_.GetRoot().AsMap().end()) {
+    auto it = input_.GetRoot().AsDict().find("base_requests");
+    if (it == input_.GetRoot().AsDict().end()) {
         return dummy_;
     }
     return it->second;
 }
     
 const json::Node& JsonReader::GetStatRequests() const {
-    auto it = input_.GetRoot().AsMap().find("stat_requests");
-    if (it == input_.GetRoot().AsMap().end()) {
+    auto it = input_.GetRoot().AsDict().find("stat_requests");
+    if (it == input_.GetRoot().AsDict().end()) {
         return dummy_;
     } 
     return it->second;
 }
 
 const json::Node& JsonReader::GetRenderSettings() const {
-    auto it = input_.GetRoot().AsMap().find("render_settings");
-    if (it == input_.GetRoot().AsMap().end()) {
+    auto it = input_.GetRoot().AsDict().find("render_settings");
+    if (it == input_.GetRoot().AsDict().end()) {
+        return dummy_;
+    }
+    return it->second;
+}
+    
+const json::Node& JsonReader::GetRoutingSettings() const {
+    auto it = input_.GetRoot().AsDict().find("routing_settings");    
+    if (it == input_.GetRoot().AsDict().end()) {
         return dummy_;
     }
     return it->second;
@@ -30,7 +38,7 @@ const json::Node& JsonReader::GetRenderSettings() const {
 void JsonReader::ParseBaseRequests() {    
     const json::Array& arr = GetBaseRequests().AsArray();    
     for (const auto& request : arr) {
-        const auto& request_map = request.AsMap();
+        const auto& request_map = request.AsDict();
         std::string_view command = request_map.at("type").AsString();
         std::string_view id = request_map.at("name").AsString();
         if (command == "Stop") {
@@ -38,7 +46,7 @@ void JsonReader::ParseBaseRequests() {
             double lng = request_map.at("longitude").AsDouble();
             geo::Coordinates coordinates{lat, lng};
             std::vector<std::pair<std::string_view, int>> road_distances;
-            auto& distances = request_map.at("road_distances").AsMap();
+            auto& distances = request_map.at("road_distances").AsDict();
             for (auto& [name, distance] : distances) {
                 road_distances.emplace_back(name, distance.AsInt());
             }            
@@ -200,20 +208,97 @@ const json::Node JsonReader::PrintMap(const json::Dict& request_map, RequestHand
 void JsonReader::ProcessRequests(const json::Node& stat_requests, RequestHandler& rh) const {
     json::Array result;
     for (auto& request : stat_requests.AsArray()) {
-        const auto& request_map = request.AsMap();
+        const auto& request_map = request.AsDict();
         const auto& type = request_map.at("type").AsString();
         if (type == "Stop") {
-            result.emplace_back(PrintStop(request_map, rh).AsMap());
+            result.emplace_back(PrintStop(request_map, rh).AsDict());
         }
         if (type == "Bus") {
-            result.emplace_back(PrintRoute(request_map, rh).AsMap());
+            result.emplace_back(PrintRoute(request_map, rh).AsDict());
         }
         if (type == "Map") {
-            result.emplace_back(PrintMap(request_map, rh).AsMap());
+            result.emplace_back(PrintMap(request_map, rh).AsDict());
+        }
+        if (type == "Route") {
+            result.emplace_back(PrintRouting(request_map, rh).AsDict());        
         }
     }
 
     json::Print(json::Document{ result }, std::cout);
+}
+    
+std::tuple<std::string_view, std::vector<const catalogue::Stop*>, bool> JsonReader::FillRoute(const json::Dict& request_map, catalogue::TransportCatalogue& catalogue) const {
+    std::string_view bus_number = request_map.at("name").AsString();
+    std::vector<const catalogue::Stop*> stops;
+    for (auto& stop : request_map.at("stops").AsArray()) {
+        stops.push_back(catalogue.FindStop(stop.AsString()));
+    }
+    bool circular_route = request_map.at("is_roundtrip").AsBool();
+
+    return std::make_tuple(bus_number, stops, circular_route);
+}
+    
+catalogue::Router JsonReader::FillRoutingSettings(const json::Node& settings) const {
+    catalogue::Router routing_settings;
+    return catalogue::Router{ settings.AsDict().at("bus_wait_time").AsInt(), settings.AsDict().at("bus_velocity").AsDouble() };
+}    
+    
+const json::Node JsonReader::PrintRouting(const json::Dict& request_map, RequestHandler& rh) const {
+    json::Node result;
+    const int id = request_map.at("id").AsInt();
+    const std::string_view stop_from = request_map.at("from").AsString();
+    const std::string_view stop_to = request_map.at("to").AsString();
+    const auto& routing = rh.GetOptimalRoute(stop_from, stop_to);
+    
+    if (!routing) {
+        result = json::Builder{}
+            .StartDict()
+                .Key("request_id").Value(id)
+                .Key("error_message").Value("not found")
+            .EndDict()
+        .Build();
+    }
+    else {
+        json::Array items;
+        double total_time = 0.0;
+        items.reserve(routing.value().edges.size());
+        for (auto& edge_id : routing.value().edges) {
+            const graph::Edge<double> edge = rh.GetRouterGraph().GetEdge(edge_id);
+            if (edge.quality == 0) {
+                items.emplace_back(json::Node(json::Builder{}
+                    .StartDict()
+                        .Key("stop_name").Value(edge.name)
+                        .Key("time").Value(edge.weight)
+                        .Key("type").Value("Wait")
+                    .EndDict()
+                .Build()));
+
+                total_time += edge.weight;
+            }
+            else {
+                items.emplace_back(json::Node(json::Builder{}
+                    .StartDict()
+                        .Key("bus").Value(edge.name)
+                        .Key("span_count").Value(static_cast<int>(edge.quality))
+                        .Key("time").Value(edge.weight)
+                        .Key("type").Value("Bus")
+                    .EndDict()
+                .Build()));
+
+                total_time += edge.weight;
+            }
+        }
+
+        result = json::Builder{}
+            .StartDict()
+                .Key("request_id").Value(id)
+                .Key("total_time").Value(total_time)
+                .Key("items").Value(items)
+            .EndDict()
+        .Build();
+    }
+
+    return result;
 }    
 
 } // namespace reader
