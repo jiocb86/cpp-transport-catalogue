@@ -1,127 +1,73 @@
-#include "transport_catalogue.h"
+#pragma once
 
-void catalogue::TransportCatalogue::AddStop(const Stop& stop){
-    stops_.push_back(stop);
-    stopname_to_stop_.insert({std::move(stops_.back().name), &stops_.back()});
-}
+#include <algorithm>
+#include <deque>
+#include <string>
+#include <string_view>
+#include <map>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+#include <set>
 
-void catalogue::TransportCatalogue::AddBus(const Bus& bus){
-    buses_.push_back(bus);
-    busname_to_bus_.insert({std::move(buses_.back().number), &buses_.back()});
-    for (const Stop* stop : bus.route) {
-        if (stopname_to_stop_.count(stop->name)) {
-            buses_for_stop_[stopname_to_stop_[stop->name]].insert(&buses_.back());
-        }
-    }    
-}
+#include "geo.h"
+#include "domain.h"
 
-const catalogue::Stop* catalogue::TransportCatalogue::FindStop(const std::string_view stop) const {
-    auto it = stopname_to_stop_.find(stop);
-    if (it != stopname_to_stop_.end()) {
-        return it->second;
+namespace catalogue {
+
+class TransportCatalogue {
+    public:
+    struct StopPairHasher {
+        
+        //хэшер для пары указателей на остановки         
+        std::size_t operator()(const std::pair<const Stop*, const Stop*>& p) const {                   
+        std::size_t hash1 = std::hash<const void*>{}(p.first);
+        std::size_t hash2 = std::hash<const void*>{}(p.second);
+            
+        //комбинируем хеши для обоих указателей            
+        return hash1 + hash2 * 37;                                                                     
     }
-    return nullptr;
-}
-
-const catalogue::Bus* catalogue::TransportCatalogue::FindBus(const std::string_view bus) const {
-    auto it = busname_to_bus_.find(bus);
-    if (it != busname_to_bus_.end()) {
-        return it->second;
-    }
-    return nullptr;
-}
-
-const std::unordered_set<const catalogue::Bus*> catalogue::TransportCatalogue::FindBusesForStop(const std::string_view stop_name) const {
-    const Stop* stop_ptr = FindStop(stop_name);    
-    auto it = buses_for_stop_.find(stop_ptr);
-    if (it != buses_for_stop_.end()) {
-        return it->second;
-    }
-    return {};
-}
-
-const catalogue::BusInfo catalogue::TransportCatalogue::GetBusInfo(const std::string_view bus_number) const {
-    catalogue::BusInfo bus_info{};
-    const catalogue::Bus* bus = FindBus(bus_number);
-    if (bus) {
-        {
-            if (bus->is_circle) {
-                bus_info.stops_count = bus->route.size();
-            } else {
-                bus_info.stops_count = bus->route.size() * 2 - 1;            
-            }
-        }
-        {
-            std::unordered_set<const Stop*> unique_stops;
-            const auto& route = FindBus(bus->number)->route;
-            for (const auto& stop : route) {
-                unique_stops.insert(stop);    
-            }
-            bus_info.unique_stops_count = unique_stops.size();
-        }
-        {
-            int dist_length = 0;
-            double geo_length = 0.0;            
-            const auto& route = FindBus(bus->number)->route;   
-            for (std::size_t i = 1; i < route.size(); ++i) {
-                const catalogue::Stop* from = route[i - 1];
-                const catalogue::Stop* to = route[i];
-                if (bus->is_circle) {
-                    dist_length += GetDistance(from, to);
-                    geo_length += geo::ComputeDistance(from->coordinates, to->coordinates);
-                } else {
-                    dist_length += GetDistance(from, to) + GetDistance(to, from);
-                    geo_length += geo::ComputeDistance(from->coordinates, to->coordinates) * 2;
-                }
-            }
-            bus_info.dist_length = dist_length;
-            bus_info.geo_length = geo_length;
-        }       
-    }
-    return bus_info;
-}
-
-const std::set<std::string_view> catalogue::TransportCatalogue::GetStopInfo(const std::string_view stop_name) const {
-    std::set<std::string_view> buses;  
-    const Stop* stop_ptr = FindStop(stop_name);
-    if (stop_ptr) {
-        for (const auto& bus : FindBusesForStop(stop_name)) {
-            if (bus) {
-                buses.insert(std::move(bus->number));  
-            }
-        }
-    }
-    return buses;
-}
-
-void catalogue::TransportCatalogue::SetDistance(const Stop* from, const Stop* to, const int dist) {
-    distances_[{from, to}] = dist;
-}
-
-int catalogue::TransportCatalogue::GetDistance(const Stop* from, const Stop* to) const {
-    auto it = distances_.find({ from, to });
-    if (it != distances_.end()) {
-        return it->second;
-    }
-    it = distances_.find({ to, from });
-    if (it != distances_.end()) {
-        return it->second;
-    }
-    return 0;
-}
-
-const std::map<std::string_view, const catalogue::Bus*> catalogue::TransportCatalogue::GetSortedAllBuses() const {
-    std::map<std::string_view, const Bus*> result;
-    for (const auto& bus : busname_to_bus_) {
-        result.emplace(bus);
-    }
-    return result;
-}
-
-const std::map<std::string_view, const catalogue::Stop*> catalogue::TransportCatalogue::GetSortedAllStops() const {
-    std::map<std::string_view, const Stop*> result;
-    for (const auto& stop : stopname_to_stop_) {
-        result.emplace(stop);
-    }
-    return result;
-}
+};    
+        void AddStop(const Stop& stop);
+        const Stop* FindStop(const std::string_view stop) const;            
+        void AddBus(const Bus& bus);                                        
+        const Bus* FindBus(const std::string_view bus) const;               
+    
+        //получить информацию о маршруте    
+        const BusInfo GetBusInfo(const std::string_view bus) const;         
+    
+        //поиск автобусов проходящих через остановку 
+        const std::unordered_set<const Bus*> FindBusesForStop(const std::string_view stop_name) const; 
+    
+        //получить информацию об остановке
+        const std::set<std::string_view> GetStopInfo(const std::string_view stop_name) const;          
+    
+        //задать дистанцию между остановками
+        void SetDistance(const Stop* from, const Stop* to, const int distance);                        
+    
+        //получить дистанцию между остановками
+        int GetDistance(const Stop* from, const Stop* to) const;         
+    
+        //получить отсортированные маршруты
+        const std::map<std::string_view, const Bus*> GetSortedAllBuses() const;
+    
+        //получить отсортированные остановки
+        const std::map<std::string_view, const Stop*> GetSortedAllStops() const;
+    
+    private:
+        std::deque<Stop> stops_;                                                                       
+        std::deque<Bus> buses_;                                                                        
+    
+        //индекс остановок(хеш - таблица)
+        std::unordered_map<std::string_view, const Bus*> busname_to_bus_;                              
+    
+        //индекс маршрутов(хеш - таблица)
+        std::unordered_map<std::string_view, const Stop*> stopname_to_stop_;                           
+        
+        //автобусы проходящие через остановку
+        std::unordered_map<const Stop*, std::unordered_set<const Bus*>> buses_for_stop_;               
+    
+        //расстояние между остановками
+        std::unordered_map<std::pair<const Stop*, const Stop*>, int, StopPairHasher> distances_;       
+};
+} // namespace catalogue
