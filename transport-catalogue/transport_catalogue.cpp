@@ -117,3 +117,11 @@ const std::map<std::string_view, const catalogue::Bus*> catalogue::TransportCata
     }
     return result;
 }
+
+const std::map<std::string_view, const catalogue::Stop*> catalogue::TransportCatalogue::GetSortedAllStops() const {
+    std::map<std::string_view, const Stop*> result;
+    for (const auto& stop : stopname_to_stop_) {
+        result.emplace(stop);
+    }
+    return result;
+}
