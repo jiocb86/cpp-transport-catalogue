@@ -238,10 +238,14 @@ std::tuple<std::string_view, std::vector<const catalogue::Stop*>, bool> JsonRead
     return std::make_tuple(bus_number, stops, circular_route);
 }
     
-catalogue::Router JsonReader::FillRoutingSettings(const json::Node& settings) const {
-    catalogue::Router routing_settings;
-    return catalogue::Router{ settings.AsDict().at("bus_wait_time").AsInt(), settings.AsDict().at("bus_velocity").AsDouble() };
-}    
+catalogue::TransportRouter::Settings JsonReader::FillRoutingSettings(const json::Node& settings) const {
+    catalogue::TransportRouter::Settings routing_settings;
+    
+    routing_settings.bus_wait_time_ = settings.AsDict().at("bus_wait_time").AsInt(); 
+    routing_settings.bus_velocity_ = settings.AsDict().at("bus_velocity").AsDouble();
+    
+    return routing_settings;
+}
     
 const json::Node JsonReader::PrintRouting(const json::Dict& request_map, RequestHandler& rh) const {
     json::Node result;
@@ -263,7 +267,7 @@ const json::Node JsonReader::PrintRouting(const json::Dict& request_map, Request
         double total_time = 0.0;
         items.reserve(routing.value().edges.size());
         for (auto& edge_id : routing.value().edges) {
-            const graph::Edge<double> edge = rh.GetRouterGraph().GetEdge(edge_id);
+            const graph::Edge<double> edge = rh.GetRouterGraph(stop_from, stop_to)->GetEdge(edge_id);
             if (edge.quality == 0) {
                 items.emplace_back(json::Node(json::Builder{}
                     .StartDict()
