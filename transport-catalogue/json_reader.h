@@ -58,7 +58,7 @@ public:
     void ApplyCommands(catalogue::TransportCatalogue& catalogue) const;
     svg::Color ParseColor(const json::Node& color_node) const;
     renderer::MapRenderer ParseRenderSettings(const json::Dict& request_map) const;
-    catalogue::Router FillRoutingSettings(const json::Node& settings) const;    
+    catalogue::TransportRouter::Settings FillRoutingSettings(const json::Node& settings) const;    
     
     const json::Node PrintRoute(const json::Dict& request_map, RequestHandler& rh) const;
     const json::Node PrintStop(const json::Dict& request_map, RequestHandler& rh) const;
