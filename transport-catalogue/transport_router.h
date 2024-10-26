@@ -7,31 +7,52 @@
 
 namespace catalogue {
 
-class Router {
+class TransportRouter {
 public:
-	Router() = default;
 
-	Router(const int bus_wait_time, const double bus_velocity)
-		: bus_wait_time_(bus_wait_time)
-		, bus_velocity_(bus_velocity) {}
+    struct Settings {
+        int bus_wait_time_ = 0;
+        double bus_velocity_ = 0.0;
+    };
 
-	Router(const Router& settings, const catalogue::TransportCatalogue& catalogue) {
-		bus_wait_time_ = settings.bus_wait_time_;
-		bus_velocity_ = settings.bus_velocity_;
-		BuildGraph(catalogue);
-	}
+    using RouteInfo = graph::Router<double>::RouteInfo;
+    
+    struct RouteItems {
+        std::optional<RouteInfo> route_info_;
+        const graph::DirectedWeightedGraph<double>* route_graph_;
+    };
 
-	const graph::DirectedWeightedGraph<double>& BuildGraph(const catalogue::TransportCatalogue& catalogue);
-	const std::optional<graph::Router<double>::RouteInfo> FindRoute(const std::string_view stop_from, const std::string_view stop_to) const;
-	const graph::DirectedWeightedGraph<double>& GetGraph() const;
+    TransportRouter() = default;
 
+    TransportRouter(const Settings& settings, const catalogue::TransportCatalogue& catalogue)
+        : settings_(settings) {
+        BuildGraph(catalogue);
+    }
+
+    const RouteItems GetRouteInfo(const std::string_view stop_from, const std::string_view stop_to) const;
+    
+protected:    
+    
+    int GetBusWaitTime() const {
+        return settings_.bus_wait_time_;
+    }
+
+    double GetBusVelocity() const {
+        return settings_.bus_velocity_;
+    }     
+
+    void BuildGraph(const catalogue::TransportCatalogue& catalogue);
+    
 private:
-	int bus_wait_time_ = 0;
-	double bus_velocity_ = 0.0;
+    Settings settings_;
 
-	graph::DirectedWeightedGraph<double> graph_;
-	std::map<std::string, graph::VertexId> stop_ids_;
-	std::unique_ptr<graph::Router<double>> router_;
+    graph::DirectedWeightedGraph<double> graph_;        
+    std::map<std::string, graph::VertexId> stop_ids_;
+    std::unique_ptr<graph::Router<double>> router_;        
+
+    void AddStopsToGraph(graph::DirectedWeightedGraph<double>& stops_graph, std::map<std::string, graph::VertexId>& stop_ids, graph::VertexId& vertex_id, const catalogue::TransportCatalogue& catalogue);
+        
+    void AddBusesToGraph(graph::DirectedWeightedGraph<double>& stops_graph, const catalogue::TransportCatalogue& catalogue);
 };
-
+    
 }
